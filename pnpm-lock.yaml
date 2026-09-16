@@ -110,6 +110,9 @@ importers:
       embla-carousel-react:
         specifier: 8.5.1
         version: 8.5.1(react@19.3.0)
+      es-toolkit:
+        specifier: ^1.52.0
+        version: 1.52.0
       input-otp:
         specifier: 1.4.1
         version: 1.4.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
