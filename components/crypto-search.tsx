@@ -1,205 +1,375 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Search } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Search, ChevronDown, Activity, ExternalLink, ArrowRight, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command"
-import { useDebounce } from "@/hooks/use-debounce"
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command";
+import { useDebounce } from "@/hooks/use-debounce";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useCurrency } from "@/components/currency-provider";
+import { getCryptoIconUrl } from "@/lib/crypto-icons";
 
 interface Cryptocurrency {
-  id: string
-  name: string
-  symbol: string
-  image: string
-  current_price: number
-  price_change_percentage_24h: number
+  id: string;
+  symbol: string;
+  name: string;
+  image: string;
+  current_price: number;
+  price_change_percentage_24h: number;
+  price_change_percentage_7d?: number;
+  market_cap?: number;
+  market_cap_rank?: number;
+  total_volume?: number;
 }
 
-// Crypto icons mapping
 const cryptoIcons: Record<string, string> = {
-  BTC: "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
-  ETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
-  XRP: "https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png",
-  DOGE: "https://assets.coingecko.com/coins/images/5/small/dogecoin.png",
-  SOL: "https://assets.coingecko.com/coins/images/4128/small/solana.png",
-  ADA: "https://assets.coingecko.com/coins/images/975/small/cardano.png",
-  DOT: "https://assets.coingecko.com/coins/images/12171/small/polkadot.png",
-  SHIB: "https://assets.coingecko.com/coins/images/11939/small/shiba.png",
-  LTC: "https://assets.coingecko.com/coins/images/2/small/litecoin.png",
-  LINK: "https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png",
-  AVAX: "https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png",
-  MATIC: "https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png",
-  UNI: "https://assets.coingecko.com/coins/images/12504/small/uniswap-uni.png",
-  ATOM: "https://assets.coingecko.com/coins/images/1481/small/cosmos_hub.png",
-  XLM: "https://assets.coingecko.com/coins/images/100/small/Stellar_symbol_black_RGB.png",
-}
+  BTC: "/placeholder.svg?height=24&width=24&text=BTC",
+  ETH: "/placeholder.svg?height=24&width=24&text=ETH",
+  XRP: "/placeholder.svg?height=24&width=24&text=XRP",
+  DOGE: "/placeholder.svg?height=24&width=24&text=DOGE",
+  SOL: "/placeholder.svg?height=24&width=24&text=SOL",
+  ADA: "/placeholder.svg?height=24&width=24&text=ADA",
+  DOT: "/placeholder.svg?height=24&width=24&text=DOT",
+  SHIB: "/placeholder.svg?height=24&width=24&text=SHIB",
+  LTC: "/placeholder.svg?height=24&width=24&text=LTC",
+  LINK: "/placeholder.svg?height=24&width=24&text=LINK",
+  AVAX: "/placeholder.svg?height=24&width=24&text=AVAX",
+  MATIC: "/placeholder.svg?height=24&width=24&text=MATIC",
+  UNI: "/placeholder.svg?height=24&width=24&text=UNI",
+  ATOM: "/placeholder.svg?height=24&width=24&text=ATOM",
+  XLM: "/placeholder.svg?height=24&width=24&text=XLM",
+};
 
-// Mock data for search when API fails
 const mockSearchResults: Cryptocurrency[] = [
-  {
-    id: "bitcoin",
-    name: "Bitcoin",
-    symbol: "btc",
-    image: cryptoIcons.BTC,
-    current_price: 43892.21,
-    price_change_percentage_24h: 3.15,
-  },
-  {
-    id: "ethereum",
-    name: "Ethereum",
-    symbol: "eth",
-    image: cryptoIcons.ETH,
-    current_price: 2354.87,
-    price_change_percentage_24h: -4.87,
-  },
-  {
-    id: "ripple",
-    name: "XRP",
-    symbol: "xrp",
-    image: cryptoIcons.XRP,
-    current_price: 0.58,
-    price_change_percentage_24h: 5.23,
-  },
-  {
-    id: "dogecoin",
-    name: "Dogecoin",
-    symbol: "doge",
-    image: cryptoIcons.DOGE,
-    current_price: 0.12,
-    price_change_percentage_24h: 9.12,
-  },
-]
+  { id: "bitcoin", name: "Bitcoin", symbol: "btc", image: cryptoIcons.BTC, current_price: 43892.21, price_change_percentage_24h: 3.15, market_cap_rank: 1 },
+  { id: "ethereum", name: "Ethereum", symbol: "eth", image: cryptoIcons.ETH, current_price: 2354.87, price_change_percentage_24h: -4.87, market_cap_rank: 2 },
+  { id: "ripple", name: "XRP", symbol: "xrp", image: cryptoIcons.XRP, current_price: 0.58, price_change_percentage_24h: 5.23, market_cap_rank: 3 },
+  { id: "dogecoin", name: "Dogecoin", symbol: "doge", image: cryptoIcons.DOGE, current_price: 0.12, price_change_percentage_24h: 9.12, market_cap_rank: 4 },
+];
 
 export function CryptoSearch() {
-  const [open, setOpen] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [results, setResults] = useState<Cryptocurrency[]>([])
-  const [loading, setLoading] = useState(false)
-  const [usingMockData, setUsingMockData] = useState(false)
-  const debouncedSearchTerm = useDebounce(searchTerm, 300)
+  const { convert, format } = useCurrency();
+  const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [results, setResults] = useState<Cryptocurrency[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        setOpen((open) => !open)
+      if ((e.key === "k" || e.key === "/") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setOpen(true);
       }
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 50);
     }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [])
+  }, [open]);
 
   useEffect(() => {
     if (!debouncedSearchTerm) {
-      setResults([])
-      return
+      setResults([]);
+      return;
     }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const fetchCryptos = async () => {
-      setLoading(true)
+      setLoading(true);
       try {
-        // Using CoinAPI to search for assets
-        const response = await fetch(
-          `https://rest.coinapi.io/v1/assets?filter_asset_id=${debouncedSearchTerm.toUpperCase()}`,
-          {
-            headers: {
-              "X-CoinAPI-Key": "72c94488-200c-4614-8f61-14b80a91ec85",
-            },
-          },
-        )
+        const response = await fetch(`/api/markets?query=${encodeURIComponent(debouncedSearchTerm)}`, {
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
-          throw new Error(`Network response was not ok: ${response.status}`)
+          throw new Error(`Network response was not ok: ${response.status}`);
         }
 
-        const data = await response.json()
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+          throw new Error("Search provider returned an invalid response");
+        }
 
-        // Format the results
         const formattedResults = data
           .map((asset: any) => {
-            // Generate a random 24h change for demo purposes
-            const randomChange = Math.random() * 10 - 5 // Random between -5% and +5%
-
+            const symbol = asset.asset_id || asset.symbol || asset.id;
             return {
-              id: asset.asset_id.toLowerCase(),
-              name: asset.name || asset.asset_id,
-              symbol: asset.asset_id.toLowerCase(),
-              image: cryptoIcons[asset.asset_id] || `/placeholder.svg?height=24&width=24&text=${asset.asset_id}`,
-              current_price: asset.price_usd || 0,
-              price_change_percentage_24h: randomChange,
-            }
+              id: asset.id || asset.asset_id?.toLowerCase() || symbol.toLowerCase(),
+              name: asset.name || asset.asset_id || symbol,
+              symbol: symbol.toLowerCase(),
+              image: cryptoIcons[symbol.toUpperCase()]?.includes("placeholder") ? getCryptoIconUrl(symbol) : cryptoIcons[symbol.toUpperCase()] || getCryptoIconUrl(symbol),
+              current_price: asset.price_usd || asset.current_price || 0,
+              price_change_percentage_24h: asset.price_change_percentage_24h || 0,
+              market_cap: asset.market_cap,
+              market_cap_rank: asset.market_cap_rank,
+              total_volume: asset.total_volume,
+            };
           })
-          .slice(0, 5) // Limit to 5 results
+          .slice(0, 10);
 
-        setResults(formattedResults)
-        setUsingMockData(false)
+        setResults(formattedResults);
       } catch (error) {
-        console.error("Error fetching search data:", error)
-
-        // Filter mock data based on search term
-        const filteredResults = mockSearchResults.filter(
-          (crypto) =>
-            crypto.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-            crypto.symbol.toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
-        )
-        setResults(filteredResults)
-        setUsingMockData(true)
+        if (error instanceof Error && error.name === "AbortError") return;
+        console.error("Error fetching search data:", error);
+        if (!controller.signal.aborted) setResults([]);
       } finally {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false);
       }
-    }
+    };
 
-    fetchCryptos()
-  }, [debouncedSearchTerm])
+    fetchCryptos();
+  }, [debouncedSearchTerm]);
+
+  const handleSelect = useCallback((crypto: Cryptocurrency) => {
+    if (!recentSearches.includes(crypto.id)) {
+      setRecentSearches(prev => [crypto.id, ...prev.slice(0, 4)]);
+    }
+    setOpen(false);
+    setSearchTerm("");
+    setResults([]);
+  }, [recentSearches]);
+
+  const formatPrice = (price: number) => {
+    const converted = convert(price);
+    if (converted >= 1) return format(price, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (converted >= 0.01) return format(price, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    return format(price, { minimumFractionDigits: 8, maximumFractionDigits: 8 });
+  };
+
+  const formatMarketCap = (cap: number | undefined) => {
+    if (!cap) return "N/A";
+    if (cap >= 1e12) return `$${(cap / 1e12).toFixed(2)}T`;
+    if (cap >= 1e9) return `$${(cap / 1e9).toFixed(2)}B`;
+    if (cap >= 1e6) return `$${(cap / 1e6).toFixed(2)}M`;
+    return `$${cap.toLocaleString()}`;
+  };
+
+  const getChangeColor = (change: number) => change >= 0 ? "text-chart-2" : "text-destructive";
+  const getChangeBg = (change: number) => change >= 0 ? "bg-chart-2/10" : "bg-destructive/10";
 
   return (
-    <>
-      <div className="relative w-full">
-        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search cryptocurrencies... (Ctrl+K)"
-          className="pl-8 bg-background/50"
-          onClick={() => setOpen(true)}
-        />
-      </div>
+    <TooltipProvider>
       <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search for any cryptocurrency..." value={searchTerm} onValueChange={setSearchTerm} />
-        <CommandList>
-          {usingMockData && searchTerm && (
-            <div className="px-3 py-2 text-xs text-amber-500">Using demo data (API unavailable)</div>
-          )}
-          <CommandEmpty>{loading ? "Loading..." : "No cryptocurrencies found."}</CommandEmpty>
-          <CommandGroup heading="Cryptocurrencies">
-            {results.map((crypto) => (
-              <CommandItem
-                key={crypto.id}
-                onSelect={() => {
-                  // In a real app, this would navigate to the crypto detail page
-                  console.log(`Selected ${crypto.name}`)
-                  setOpen(false)
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <img src={crypto.image || "/placeholder.svg"} alt={crypto.name} className="h-6 w-6 rounded-full" />
-                  <span>{crypto.name}</span>
-                  <span className="text-muted-foreground">{crypto.symbol.toUpperCase()}</span>
-                  <span className={crypto.price_change_percentage_24h >= 0 ? "text-green-500" : "text-red-500"}>
-                    {crypto.price_change_percentage_24h.toFixed(2)}%
-                  </span>
+        <Command className="w-full max-w-2xl" shouldFilter={false}>
+          <CommandInput
+            ref={inputRef}
+            placeholder="Search for any cryptocurrency... (⌘K)"
+            value={searchTerm}
+            onValueChange={setSearchTerm}
+            className="bg-background/50 border-border/50 placeholder:text-muted-foreground/50"
+          />
+          <CommandList className="max-h-[500px]">
+            <CommandEmpty className="py-8">
+              {loading ? (
+                <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span>Searching...</span>
                 </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
-    </>
-  )
-}
+              ) : searchTerm ? (
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <Search className="h-8 w-8 opacity-50" />
+                  <span>No cryptocurrencies found for "{searchTerm}"</span>
+                </div>
+              ) : recentSearches.length > 0 ? (
+                <div className="text-center">
+                  <p className="text-sm font-medium mb-3">Recent searches</p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {recentSearches.map((id) => (
+                      <Button
+                        key={id}
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => {
+                          setSearchTerm(id);
+                          inputRef.current?.focus();
+                        }}
+                      >
+                        {id.charAt(0).toUpperCase() + id.slice(1)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <Search className="h-8 w-8 opacity-50" />
+                  <span>Type to search 10,000+ cryptocurrencies</span>
+                  <p className="text-xs">Press <kbd className="px-1.5 py-0.5 bg-muted rounded">⌘K</kbd> to open</p>
+                </div>
+              )}
+            </CommandEmpty>
 
+            {results.length > 0 && (
+              <>
+                <CommandGroup heading="Cryptocurrencies">
+                  {results.map((crypto, index) => (
+                    <CommandItem
+                      key={crypto.id}
+                      onSelect={() => handleSelect(crypto)}
+                      className="relative overflow-hidden group hover:bg-primary/5 transition-colors"
+                      style={{ animationDelay: `${index * 30}ms` }}
+                    >
+                      <div className="flex items-center gap-3 w-full">
+                        <Avatar className="h-8 w-8 ring-2 ring-background">
+                          <AvatarImage src={crypto.image} alt={crypto.name} />
+                          <AvatarFallback className="text-xs font-bold">{crypto.symbol.toUpperCase()[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{crypto.name}</p>
+                            {crypto.market_cap_rank && crypto.market_cap_rank <= 10 && (
+                              <Badge variant="secondary" className="text-[10px] h-3.5 px-1.5">#{crypto.market_cap_rank}</Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground capitalize">{crypto.symbol.toUpperCase()}</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-right min-w-[160px]">
+                          <div className={cn("flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold", getChangeBg(crypto.price_change_percentage_24h), getChangeColor(crypto.price_change_percentage_24h))}>
+                            {crypto.price_change_percentage_24h >= 0 ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5 rotate-180" />}
+                            {crypto.price_change_percentage_24h.toFixed(2)}%
+                          </div>
+                          <p className="font-mono tabular-nums font-medium text-sm whitespace-nowrap">{formatPrice(crypto.current_price)}</p>
+                        </div>
+                      </div>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleSelect(crypto); }}>
+                                <ArrowRight className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="left" className="max-w-xs">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">{crypto.name} ({crypto.symbol.toUpperCase()})</span>
+                                <Badge variant={crypto.price_change_percentage_24h >= 0 ? "secondary" : "destructive"} className="gap-1">
+                                  {crypto.price_change_percentage_24h >= 0 ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5 rotate-180" />}
+                                  {crypto.price_change_percentage_24h.toFixed(2)}% (24h)
+                                </Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs border-t border-border/50 pt-2">
+                                <div>
+                                  <p className="text-muted-foreground">Price</p>
+                                  <p className="font-medium">{formatPrice(crypto.current_price)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Market Cap</p>
+                                  <p className="font-medium">{formatMarketCap(crypto.market_cap)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Rank</p>
+                                  <p className="font-medium">#{crypto.market_cap_rank || "N/A"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Volume</p>
+                                  <p className="font-medium">{crypto.total_volume ? formatMarketCap(crypto.total_volume) : "N/A"}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+
+                <CommandSeparator />
+
+                <CommandGroup heading="Quick Actions">
+                  <CommandItem onSelect={() => { setSearchTerm("bitcoin"); inputRef.current?.focus(); }} className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8"><AvatarImage src={cryptoIcons.BTC} alt="Bitcoin" /></Avatar>
+                    <div className="flex-1">
+                      <p className="font-medium">Bitcoin (BTC)</p>
+                      <p className="text-xs text-muted-foreground">View Bitcoin details</p>
+                    </div>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CommandItem>
+                  <CommandItem onSelect={() => { setSearchTerm("ethereum"); inputRef.current?.focus(); }} className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8"><AvatarImage src={cryptoIcons.ETH} alt="Ethereum" /></Avatar>
+                    <div className="flex-1">
+                      <p className="font-medium">Ethereum (ETH)</p>
+                      <p className="text-xs text-muted-foreground">View Ethereum details</p>
+                    </div>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CommandItem>
+                  <CommandItem onSelect={() => { setSearchTerm("solana"); inputRef.current?.focus(); }} className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8"><AvatarImage src={cryptoIcons.SOL} alt="Solana" /></Avatar>
+                    <div className="flex-1">
+                      <p className="font-medium">Solana (SOL)</p>
+                      <p className="text-xs text-muted-foreground">View Solana details</p>
+                    </div>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CommandItem>
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+        </Command>
+      </CommandDialog>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="relative w-full px-2 sm:px-0">
+            <Search className="absolute left-5 sm:left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+            <Input
+              placeholder="Search cryptocurrencies... (⌘K)"
+              className="pl-10 pr-12 sm:pr-10 bg-background/50 border-border/50 hover:border-primary/30 focus:border-primary transition-colors text-sm sm:text-base"
+              onClick={() => setOpen(true)}
+              readOnly
+            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-xl text-muted-foreground hover:text-foreground"
+                    onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">Open search</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start">
+          <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">⌘K</kbd> to open search
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}

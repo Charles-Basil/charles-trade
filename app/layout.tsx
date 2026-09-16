@@ -1,9 +1,7 @@
 import "@/styles/globals.css"
-import { Inter } from "next/font/google"
 import type React from "react"
 import { ThemeProvider } from "@/components/theme-provider"
-
-const inter = Inter({ subsets: ["latin"] })
+import { CurrencyProvider } from "@/components/currency-provider"
 
 export default function RootLayout({
   children,
@@ -12,17 +10,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider defaultTheme="dark">{children}</ThemeProvider>
+      <body>
+        <ThemeProvider defaultTheme="dark"><CurrencyProvider>{children}</CurrencyProvider></ThemeProvider>
       </body>
     </html>
   )
 }
 
-
-
-import './globals.css'
-
 export const metadata = {
-      generator: 'v0.dev'
-    };
+  generator: "charles-trade",
+};

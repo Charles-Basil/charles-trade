@@ -1,304 +1,432 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useMemo } from "react";
+import {
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ComposedChart,
+} from "recharts";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useCurrency } from "@/components/currency-provider";
+import { formatDashboardDate, formatDashboardTime } from "@/lib/date-time";
 
 const timeRanges = [
-  { label: "24h", value: "1DAY" },
-  { label: "7d", value: "7DAY" },
-  { label: "30d", value: "1MTH" },
-  { label: "90d", value: "3MTH" },
-  { label: "1y", value: "1YRS" },
-  { label: "YTD", value: "YTD" },
-]
+  { label: "1H", value: "1H", days: "1/24" },
+  { label: "24H", value: "1DAY", days: "1" },
+  { label: "7D", value: "7DAY", days: "7" },
+  { label: "30D", value: "1MTH", days: "30" },
+  { label: "90D", value: "3MTH", days: "90" },
+  { label: "1Y", value: "1YRS", days: "365" },
+  { label: "ALL", value: "MAX", days: "max" },
+] as const;
 
-interface CryptoData {
-  date: string
-  bitcoin: number
-  ethereum: number
-  ripple: number
-  dogecoin: number
+interface ChartDataPoint {
+  date: string;
+  timestamp: number;
+  bitcoin: number;
+  ethereum: number;
+  ripple: number;
+  dogecoin: number;
+  solana?: number;
+  cardano?: number;
 }
 
-// Mock data for different time ranges
-const generateMockData = (range: string): CryptoData[] => {
-  const data: CryptoData[] = []
-  const dataPoints =
-    range === "1DAY"
-      ? 24
-      : range === "7DAY"
-        ? 7
-        : range === "1MTH"
-          ? 30
-          : range === "3MTH"
-            ? 30
-            : range === "1YRS" || range === "YTD"
-              ? 12
-              : 30
+const assetConfig = {
+  bitcoin: { name: "Bitcoin", color: "#F7931A", key: "bitcoin" },
+  ethereum: { name: "Ethereum", color: "#627EEA", key: "ethereum" },
+  ripple: { name: "XRP", color: "#23292F", key: "ripple" },
+  dogecoin: { name: "Dogecoin", color: "#C2A633", key: "dogecoin" },
+  solana: { name: "Solana", color: "#9945FF", key: "solana" },
+  cardano: { name: "Cardano", color: "#0033AD", key: "cardano" },
+} as const;
 
-  const now = new Date()
-  const startDate = new Date()
-
-  if (range === "1DAY") {
-    startDate.setHours(now.getHours() - 24)
-  } else if (range === "7DAY") {
-    startDate.setDate(now.getDate() - 7)
-  } else if (range === "1MTH") {
-    startDate.setDate(now.getDate() - 30)
-  } else if (range === "3MTH") {
-    startDate.setDate(now.getDate() - 90)
-  } else if (range === "1YRS") {
-    startDate.setFullYear(now.getFullYear() - 1)
-  } else if (range === "YTD") {
-    startDate.setMonth(0, 1) // January 1st of current year
-  }
-
-  // Base prices
-  const basePrices = {
-    bitcoin: 43000,
-    ethereum: 2300,
-    ripple: 0.58,
-    dogecoin: 0.12,
-  }
-
-  // Volatility factors
-  const volatility = {
-    bitcoin: 0.05,
-    ethereum: 0.07,
-    ripple: 0.09,
-    dogecoin: 0.11,
-  }
-
-  // Generate data points
-  for (let i = 0; i < dataPoints; i++) {
-    const pointDate = new Date(startDate)
-
-    if (range === "1DAY") {
-      pointDate.setHours(startDate.getHours() + i)
-    } else if (range === "7DAY") {
-      pointDate.setDate(startDate.getDate() + i)
-    } else if (range === "1MTH" || range === "3MTH") {
-      pointDate.setDate(startDate.getDate() + Math.floor((Number.parseInt(range) / dataPoints) * i))
-    } else {
-      pointDate.setMonth(startDate.getMonth() + i)
-    }
-
-    // Create random price movements
-    const btcChange = (Math.random() - 0.5) * 2 * volatility.bitcoin
-    const ethChange = (Math.random() - 0.5) * 2 * volatility.ethereum
-    const xrpChange = (Math.random() - 0.5) * 2 * volatility.ripple
-    const dogeChange = (Math.random() - 0.5) * 2 * volatility.dogecoin
-
-    // Apply trend based on position in the range (upward trend for most cryptos)
-    const trendFactor = i / dataPoints
-    const btcTrend = range === "YTD" ? 0.15 * trendFactor : 0.1 * trendFactor
-    const ethTrend = range === "YTD" ? 0.2 * trendFactor : 0.12 * trendFactor
-    const xrpTrend = range === "YTD" ? 0.1 * trendFactor : 0.08 * trendFactor
-    const dogeTrend = range === "YTD" ? 0.3 * trendFactor : 0.18 * trendFactor
-
-    data.push({
-      date: formatDate(pointDate, range),
-      bitcoin: basePrices.bitcoin * (1 + btcChange + btcTrend),
-      ethereum: basePrices.ethereum * (1 + ethChange + ethTrend),
-      ripple: basePrices.ripple * (1 + xrpChange + xrpTrend),
-      dogecoin: basePrices.dogecoin * (1 + dogeChange + dogeTrend),
-    })
-  }
-
-  return data
-}
-
-// Format date based on time range
-const formatDate = (date: Date, range: string): string => {
-  if (range === "1DAY") {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  } else if (range === "7DAY" || range === "1MTH") {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" })
-  } else {
-    return date.toLocaleDateString([], { month: "short", year: "2-digit" })
-  }
-}
+type AssetKey = keyof typeof assetConfig;
 
 export function CryptoChart() {
-  const [data, setData] = useState<CryptoData[]>([])
-  const [loading, setLoading] = useState(true)
-  const [timeRange, setTimeRange] = useState("1MTH")
-  const [error, setError] = useState<string | null>(null)
-  const [usingMockData, setUsingMockData] = useState(false)
+  const { currency, convert } = useCurrency();
+  const [data, setData] = useState<ChartDataPoint[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState<typeof timeRanges[number]["value"]>("1MTH");
+  const [selectedAssets, setSelectedAssets] = useState<AssetKey[]>(["bitcoin", "ethereum", "ripple", "dogecoin"]);
+  const [chartType, setChartType] = useState<"area" | "line">("area");
+  const [error, setError] = useState<string | null>(null);
+  const [priceScale, setPriceScale] = useState<"linear" | "log">("linear");
 
   useEffect(() => {
     const fetchCryptoData = async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
       try {
-        // CoinAPI endpoints for historical data
-        const symbols = [
-          "BITSTAMP_SPOT_BTC_USD", // Bitcoin
-          "BITSTAMP_SPOT_ETH_USD", // Ethereum
-          "BITSTAMP_SPOT_XRP_USD", // Ripple
-          "KRAKEN_SPOT_DOGE_USD", // Dogecoin
-        ]
+        const daysParam = timeRange === "1H" ? "1" : timeRange === "MAX" ? "max" : timeRanges.find(r => r.value === timeRange)?.days || "30";
+        const interval = timeRange === "1H" ? "hourly" : timeRange === "1DAY" ? "hourly" : "daily";
 
-        // Get period end (now)
-        const endDate = new Date().toISOString()
+        const response = await fetch(
+          `/api/markets/history?days=${daysParam}&interval=${interval}&assets=${selectedAssets.join(",")}`,
+          { cache: "no-store" }
+        );
 
-        // Calculate period start based on timeRange
-        const startDate = new Date()
-        if (timeRange === "1DAY") {
-          startDate.setDate(startDate.getDate() - 1)
-        } else if (timeRange === "7DAY") {
-          startDate.setDate(startDate.getDate() - 7)
-        } else if (timeRange === "1MTH") {
-          startDate.setMonth(startDate.getMonth() - 1)
-        } else if (timeRange === "3MTH") {
-          startDate.setMonth(startDate.getMonth() - 3)
-        } else if (timeRange === "1YRS") {
-          startDate.setFullYear(startDate.getFullYear() - 1)
-        } else if (timeRange === "YTD") {
-          startDate.setMonth(0, 1) // January 1st of current year
-          startDate.setHours(0, 0, 0, 0)
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || `History unavailable (${response.status})`);
         }
+        if (!Array.isArray(payload)) throw new Error("History provider returned an invalid response");
+        const points: ChartDataPoint[] = payload;
 
-        // Determine appropriate period based on time range
-        let period
-        if (timeRange === "1DAY") {
-          period = "1HRS" // 1 hour intervals for 1 day
-        } else if (timeRange === "7DAY") {
-          period = "6HRS" // 6 hour intervals for 7 days
-        } else if (timeRange === "1MTH") {
-          period = "1DAY" // 1 day intervals for 1 month
-        } else {
-          period = "1DAY" // 1 day intervals for longer periods
-        }
-
-        // Fetch data for each cryptocurrency
-        const promises = symbols.map((symbol) =>
-          fetch(
-            `https://rest.coinapi.io/v1/ohlcv/${symbol}/history?period_id=${period}&time_start=${startDate.toISOString()}&time_end=${endDate}`,
-            {
-              headers: {
-                "X-CoinAPI-Key": "9e036089-2dac-4d33-bbd9-129b9e200870",
-              },
-            },
-          ).then((res) => {
-            if (!res.ok) throw new Error(`Failed to fetch ${symbol} data: ${res.status}`)
-            return res.json()
-          }),
-        )
-
-        const results = await Promise.all(promises)
-
-        // Process and combine the data
-        const combinedData: CryptoData[] = []
-
-        // Get the shortest result length to ensure we have data for all cryptos
-        const minLength = Math.min(...results.map((r) => r.length))
-
-        // Limit the number of data points to avoid overcrowding
-        const maxDataPoints = 30
-        const interval = Math.max(1, Math.floor(minLength / maxDataPoints))
-
-        for (let i = 0; i < minLength; i += interval) {
-          if (i < results[0].length) {
-            const timestamp = new Date(results[0][i].time_period_start)
-            const formattedDate = formatDate(timestamp, timeRange)
-
-            combinedData.push({
-              date: formattedDate,
-              bitcoin: results[0][i].price_close,
-              ethereum: results[1][i].price_close,
-              ripple: results[2][i].price_close,
-              dogecoin: results[3][i].price_close,
-            })
-          }
-        }
-
-        setData(combinedData)
-        setUsingMockData(false)
+        setData(points.map((point) => ({
+          ...point,
+          date: timeRange === "1H"
+            ? formatDashboardTime(point.timestamp)
+            : formatDashboardDate(point.timestamp, { month: "short", day: "numeric" }),
+        })));
       } catch (err) {
-        console.error("Error fetching crypto data:", err)
-
-        // Fall back to mock data
-        const mockData = generateMockData(timeRange)
-        setData(mockData)
-        setUsingMockData(true)
+        const message = err instanceof Error ? err.message : "Historical data is temporarily unavailable.";
+        console.warn("Crypto history unavailable:", message);
+        setError(message);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchCryptoData()
-  }, [timeRange])
+    fetchCryptoData();
+  }, [timeRange, selectedAssets]);
+
+  const formattedData = useMemo(() => data.map((point) => {
+    const convertedPoint = { ...point };
+    (Object.keys(assetConfig) as AssetKey[]).forEach((asset) => {
+      if (typeof point[asset] === "number") convertedPoint[asset] = convert(point[asset]);
+    });
+    return convertedPoint;
+  }), [data, convert, currency.code]);
+
+  const currentPrices = useMemo(() => {
+    if (!formattedData.length) return {};
+    const last = formattedData[formattedData.length - 1];
+    const first = formattedData[0];
+    const result: Record<string, { price: number; change: number; changePct: number }> = {};
+    selectedAssets.forEach(asset => {
+      const current = last[asset];
+      const previous = first[asset];
+      if (typeof current !== "number" || typeof previous !== "number" || !Number.isFinite(current) || !Number.isFinite(previous)) return;
+      result[asset] = {
+        price: current,
+        change: current - previous,
+        changePct: previous ? ((current - previous) / previous) * 100 : 0,
+      };
+    });
+    return result;
+  }, [formattedData, selectedAssets]);
+
+  const yAxisFormatter = (value: number) => {
+    if (value >= 1e9) return `${currency.symbol}${(value / 1e9).toFixed(1)}B`;
+    if (value >= 1e6) return `${currency.symbol}${(value / 1e6).toFixed(1)}M`;
+    if (value >= 1e3) return `${currency.symbol}${(value / 1e3).toFixed(1)}K`;
+    return `${currency.symbol}${value.toFixed(value < 1 ? 4 : 2)}`;
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const asset = payload[0].payload;
+      return (
+        <div className="rounded-xl border border-border/50 bg-card/95 backdrop-blur-xl p-4 shadow-2xl min-w-[200px] animate-fade-in">
+          <div className="font-display font-semibold text-sm mb-3 text-center">{label}</div>
+          <div className="grid gap-2">
+            {payload.map((entry: any, index: number) => {
+              const assetKey = entry.dataKey as AssetKey;
+              const config = assetConfig[assetKey];
+              const priceData = currentPrices[assetKey];
+              if (!config || priceData === undefined) return null;
+              return (
+                <div key={assetKey} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: config.color }} />
+                    <span className="font-medium capitalize">{config.name}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold tabular-nums">{new Intl.NumberFormat(undefined, { style: "currency", currency: currency.code, maximumFractionDigits: priceData.price < 1 ? 6 : 2 }).format(priceData.price)}</p>
+                    <p className={cn("text-xs", priceData.changePct >= 0 ? "text-chart-2" : "text-destructive")}>
+                      {priceData.changePct >= 0 ? "+" : ""}{priceData.changePct.toFixed(2)}%
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const LegendItem = ({ asset }: { asset: AssetKey }) => {
+    const config = assetConfig[asset];
+    const priceData = currentPrices[asset];
+    const isSelected = selectedAssets.includes(asset);
+    return (
+      <button
+        onClick={() => setSelectedAssets(prev => prev.includes(asset) ? prev.filter(a => a !== asset) : [...prev, asset])}
+        className={cn(
+          "flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all",
+          isSelected
+            ? "bg-primary/10 text-primary border border-primary/20"
+            : "bg-muted/30 text-muted-foreground hover:bg-muted/50"
+        )}
+        disabled={selectedAssets.length === 1 && isSelected}
+      >
+        <div className={cn("h-2.5 w-2.5 rounded-full", isSelected ? "" : "opacity-50")} style={{ backgroundColor: config.color }} />
+        <span className="text-xs font-medium capitalize">{config.name}</span>
+        {priceData && (
+          <span className={cn("text-xs font-semibold tabular-nums", priceData.changePct >= 0 ? "text-chart-2" : "text-destructive")}>
+            {priceData.changePct >= 0 ? "+" : ""}{priceData.changePct.toFixed(1)}%
+          </span>
+        )}
+      </button>
+    );
+  };
 
   if (loading) {
-    return <div className="h-[300px] w-full flex items-center justify-center">Loading chart data...</div>
+    return (
+      <div className="surface-panel h-[400px] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          <p className="text-muted-foreground">Loading chart data...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full">
-      <div className="mb-4 flex items-center justify-between">
-        <div>{usingMockData && <div className="text-sm text-amber-500">Using demo data (API unavailable)</div>}</div>
-        <div className="flex items-center gap-2">
-          {timeRanges.map((range) => (
+    <div className="surface-panel-elevated overflow-hidden">
+      <div className="border-b border-border/30 px-6 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <h2 className="font-display text-xl font-semibold">Market Pulse</h2>
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+              {selectedAssets.length} Assets
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-muted/50 rounded-xl p-1" role="radiogroup" aria-label="Chart type">
+              <Button
+                variant={chartType === "area" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-lg px-3"
+                onClick={() => setChartType("area")}
+                aria-pressed={chartType === "area"}
+              >
+                Area
+              </Button>
+              <Button
+                variant={chartType === "line" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-lg px-3"
+                onClick={() => setChartType("line")}
+                aria-pressed={chartType === "line"}
+              >
+                Line
+              </Button>
+            </div>
             <Button
-              key={range.value}
+              variant="ghost"
               size="sm"
-              variant={timeRange === range.value ? "default" : "ghost"}
-              onClick={() => setTimeRange(range.value)}
+              className={cn("rounded-lg", priceScale === "log" && "bg-primary/10 text-primary")}
+              onClick={() => setPriceScale(prev => prev === "linear" ? "log" : "linear")}
             >
-              {range.label}
+              {priceScale === "linear" ? "Log" : "Linear"}
             </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-6 py-3 border-b border-border/30 flex flex-wrap gap-2">
+        {timeRanges.map((range) => (
+          <Button
+            key={range.value}
+            size="sm"
+            variant={timeRange === range.value ? "default" : "ghost"}
+            className="rounded-xl px-4 transition-all"
+            onClick={() => setTimeRange(range.value)}
+          >
+            {range.label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="px-6 py-3 border-b border-border/30 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground mr-2">Assets:</span>
+        <div className="flex flex-wrap gap-1.5">
+          {(Object.keys(assetConfig) as AssetKey[]).map((asset) => (
+            <LegendItem key={asset} asset={asset} />
           ))}
         </div>
       </div>
-      <div className="h-[300px] w-full">
+
+      <div className="p-3 h-[320px] sm:p-6 sm:h-[380px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
-            <XAxis dataKey="date" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-            <YAxis
-              tick={{ fontSize: 12 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value) => `$${value.toLocaleString()}`}
-            />
-            <Tooltip
-              content={({ active, payload, label }) => {
-                if (active && payload && payload.length) {
+          {chartType === "area" ? (
+            <AreaChart data={formattedData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                {selectedAssets.map((asset) => {
+                  const config = assetConfig[asset];
                   return (
-                    <div className="rounded-lg border bg-background p-3 shadow-sm">
-                      <div className="mb-2 font-medium">{label}</div>
-                      <div className="grid gap-2">
-                        {payload.map((entry, index) => (
-                          <div key={`item-${index}`} className="flex items-center gap-2">
-                            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: entry.color }} />
-                            <span className="capitalize">{entry.name}</span>
-                            <span className="font-medium">
-                              $
-                              {Number(entry.value).toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                }
-                return null
-              }}
-            />
-            <Legend />
-            <Line type="monotone" dataKey="bitcoin" stroke="#F7931A" strokeWidth={2} dot={false} name="Bitcoin" />
-            <Line type="monotone" dataKey="ethereum" stroke="#627EEA" strokeWidth={2} dot={false} name="Ethereum" />
-            <Line type="monotone" dataKey="ripple" stroke="#23292F" strokeWidth={2} dot={false} name="Ripple" />
-            <Line type="monotone" dataKey="dogecoin" stroke="#C2A633" strokeWidth={2} dot={false} name="Dogecoin" />
-          </LineChart>
+                    <linearGradient key={asset} id={`color-${asset}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={config.color} stopOpacity={0.4} />
+                      <stop offset="100%" stopColor={config.color} stopOpacity={0} />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                dy={10}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                type="number"
+                scale={priceScale}
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={yAxisFormatter}
+                dx={-10}
+                width={60}
+              />
+              <Tooltip content={<CustomTooltip />} wrapperStyle={{ outline: "none" }} />
+              <Legend
+                wrapperStyle={{ paddingTop: 20 }}
+                layout="horizontal"
+                align="center"
+                verticalAlign="bottom"
+                iconType="circle"
+                iconSize={8}
+                formatter={(name: string) => assetConfig[name as AssetKey]?.name ?? name}
+              />
+              {selectedAssets.map((asset) => {
+                const config = assetConfig[asset];
+                return (
+                  <Area
+                    key={asset}
+                    type="monotone"
+                    dataKey={asset}
+                    stroke={config.color}
+                    strokeWidth={2}
+                    fill={`url(#color-${asset})`}
+                    opacity={1}
+                    name={config.name}
+                    isAnimationActive={true}
+                    animationDuration={800}
+                    animationEasing="ease-out"
+                  />
+                );
+              })}
+            </AreaChart>
+          ) : (
+            <LineChart data={formattedData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.3)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                dy={10}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                type="number"
+                scale={priceScale}
+                tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={yAxisFormatter}
+                dx={-10}
+                width={60}
+              />
+              <Tooltip content={<CustomTooltip />} wrapperStyle={{ outline: "none" }} />
+              <Legend
+                wrapperStyle={{ paddingTop: 20 }}
+                layout="horizontal"
+                align="center"
+                verticalAlign="bottom"
+                iconType="circle"
+                iconSize={8}
+                formatter={(name: string) => assetConfig[name as AssetKey]?.name ?? name}
+              />
+              {selectedAssets.map((asset) => {
+                const config = assetConfig[asset];
+                return (
+                  <Line
+                    key={asset}
+                    type="monotone"
+                    dataKey={asset}
+                    stroke={config.color}
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 6, strokeWidth: 2 }}
+                    name={config.name}
+                    isAnimationActive={true}
+                    animationDuration={800}
+                    animationEasing="ease-out"
+                  />
+                );
+              })}
+            </LineChart>
+          )}
         </ResponsiveContainer>
       </div>
-    </div>
-  )
-}
 
+      {error && (
+        <div className="px-6 py-4 bg-destructive/10 border-t border-border/30">
+          <p className="text-sm text-destructive flex items-center gap-2">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            {error}
+          </p>
+        </div>
+      )}
+
+      <div className="px-6 py-4 bg-muted/30 border-t border-border/30">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {selectedAssets.map((asset) => {
+            const config = assetConfig[asset];
+            const priceData = currentPrices[asset];
+            return (
+              <div
+                key={asset}
+                className={cn(
+                  "rounded-xl p-4 text-center transition-all",
+                  "bg-card border border-border/50",
+                  selectedAssets.length === 1 ? "ring-2 ring-primary/20" : ""
+                )}
+              >
+                <div className="flex items-center justify-center gap-1.5 mb-2">
+                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: config.color }} />
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{config.name}</span>
+                </div>
+                {priceData && (
+                  <>
+                    <p className="font-display text-lg font-bold tabular-nums">{new Intl.NumberFormat(undefined, { style: "currency", currency: currency.code, maximumFractionDigits: priceData.price < 1 ? 6 : 2 }).format(priceData.price)}</p>
+                    <p className={cn("text-xs font-semibold mt-1", priceData.changePct >= 0 ? "text-chart-2" : "text-destructive")}>
+                      {priceData.changePct >= 0 ? "+" : ""}{priceData.changePct.toFixed(2)}%
+                    </p>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

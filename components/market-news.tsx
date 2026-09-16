@@ -13,8 +13,7 @@ interface NewsItem {
   publishedAt: string
 }
 
-// Since CoinAPI doesn't have a dedicated news API, we'll use a combination of
-// cryptocurrency news sources and mock data for demonstration
+// News is kept as a separate provider integration from the market-price feed.
 const cryptoNewsSources = [
   {
     name: "CoinDesk",
@@ -42,7 +41,7 @@ const mockNews: NewsItem[] = [
       "Bitcoin has broken through the $45,000 resistance level as major financial institutions announce new cryptocurrency investment products and services.",
     url: "https://www.coindesk.com",
     source: "CoinDesk",
-    imageUrl: "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
+    imageUrl: "/placeholder.svg?height=40&width=40&text=BTC",
     publishedAt: "2 hours ago",
   },
   {
@@ -51,7 +50,7 @@ const mockNews: NewsItem[] = [
       "The Ethereum Foundation has revealed plans for a significant upgrade to its layer-2 scaling solutions, promising reduced gas fees and improved transaction throughput.",
     url: "https://cointelegraph.com",
     source: "Cointelegraph",
-    imageUrl: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+    imageUrl: "/placeholder.svg?height=40&width=40&text=ETH",
     publishedAt: "5 hours ago",
   },
   {
@@ -60,7 +59,7 @@ const mockNews: NewsItem[] = [
       "Ripple's CEO expressed confidence about a favorable outcome in the ongoing legal battle with the SEC, citing recent court developments and regulatory clarity in other jurisdictions.",
     url: "https://cryptoslate.com",
     source: "CryptoSlate",
-    imageUrl: "https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png",
+    imageUrl: "/placeholder.svg?height=40&width=40&text=XRP",
     publishedAt: "1 day ago",
   },
   {
@@ -69,7 +68,7 @@ const mockNews: NewsItem[] = [
       "The Dogecoin Foundation has announced a community-funded development grant program to enhance the cryptocurrency's utility and adoption in e-commerce and social media tipping.",
     url: "https://bitcoinmagazine.com",
     source: "Bitcoin Magazine",
-    imageUrl: "https://assets.coingecko.com/coins/images/5/small/dogecoin.png",
+    imageUrl: "/placeholder.svg?height=40&width=40&text=DOGE",
     publishedAt: "2 days ago",
   },
   {
@@ -101,32 +100,17 @@ export function MarketNews() {
       setLoading(true)
 
       try {
-        // Try to fetch crypto market data to get symbols for news context
-        // This helps us create more relevant mock news if the news API isn't available
-        const response = await fetch("https://rest.coinapi.io/v1/assets?filter_asset_id=BTC,ETH,XRP,DOGE", {
-          headers: {
-            "X-CoinAPI-Key": "72c94488-200c-4614-8f61-14b80a91ec85",
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error(`Network response was not ok: ${response.status}`)
-        }
-
-        // We successfully connected to CoinAPI, but since they don't have a dedicated news API,
-        // we'll use our mock news data with current timestamps
-
         // Update the mock news with current timestamps
-        const updatedNews = mockNews.map((item, index) => {
+        const updatedNews = mockNews.map((item) => {
           const date = new Date()
 
           // Adjust the date based on the publishedAt text
           if (item.publishedAt.includes("hours")) {
             const hours = Number.parseInt(item.publishedAt)
-            date.setHours(date.getHours() - hours)
+            date.setTime(date.getTime() - hours * 60 * 60 * 1000)
           } else if (item.publishedAt.includes("day")) {
             const days = Number.parseInt(item.publishedAt)
-            date.setDate(date.getDate() - days)
+            date.setTime(date.getTime() - days * 24 * 60 * 60 * 1000)
           }
 
           return {

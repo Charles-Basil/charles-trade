@@ -1,34 +1,17 @@
 "use client"
 
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronDown } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-
-interface Currency {
-  code: string
-  name: string
-  symbol: string
-}
-
-const currencies: Currency[] = [
-  { code: "USD", name: "US Dollar", symbol: "$" },
-  { code: "EUR", name: "Euro", symbol: "€" },
-  { code: "GBP", name: "British Pound", symbol: "£" },
-  { code: "JPY", name: "Japanese Yen", symbol: "¥" },
-  { code: "BTC", name: "Bitcoin", symbol: "₿" },
-  { code: "ETH", name: "Ethereum", symbol: "Ξ" },
-  { code: "XRP", name: "Ripple", symbol: "XRP" },
-  { code: "DOGE", name: "Dogecoin", symbol: "Ð" },
-]
+import { currencies, useCurrency } from "@/components/currency-provider"
 
 export function CurrencySelector() {
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(currencies[0])
+  const { currency: selectedCurrency, setCurrency } = useCurrency()
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-1 px-2 sm:gap-2 sm:px-3">
           {selectedCurrency.symbol} {selectedCurrency.code}
           <ChevronDown className="h-4 w-4" />
         </Button>
@@ -38,7 +21,7 @@ export function CurrencySelector() {
           <DropdownMenuItem
             key={currency.code}
             className="cursor-pointer"
-            onClick={() => setSelectedCurrency(currency)}
+            onClick={() => setCurrency(currency)}
           >
             <div className="flex items-center justify-between w-full">
               <span>{currency.name}</span>

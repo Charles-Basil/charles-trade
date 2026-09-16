@@ -1,299 +1,383 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Avatar } from "@/components/ui/avatar"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowUpDown } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect, useMemo } from "react";
+import { Activity, ArrowUpDown, ChevronUp, ChevronDown, RefreshCw, ExternalLink, Search, Filter } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useCurrency } from "@/components/currency-provider";
+import { formatDashboardTime } from "@/lib/date-time";
 
 interface CryptoMarketData {
-  id: string
-  name: string
-  symbol: string
-  image: string
-  current_price: number
-  price_change_24h: number
-  price_change_percentage_24h: number
-  market_cap: number
-  total_volume: number
+  id: string;
+  symbol: string;
+  name: string;
+  image: string;
+  current_price: number;
+  price_change_24h: number;
+  price_change_percentage_24h: number;
+  price_change_percentage_7d?: number;
+  price_change_percentage_30d?: number;
+  market_cap?: number;
+  market_cap_rank?: number;
+  total_volume?: number;
+  high_24h?: number;
+  low_24h?: number;
+  ath?: number;
+  ath_change_percentage?: number;
+  last_updated: string;
 }
 
-// Crypto icons mapping
-const cryptoIcons: Record<string, string> = {
-  BTC: "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
-  ETH: "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
-  XRP: "https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png",
-  DOGE: "https://assets.coingecko.com/coins/images/5/small/dogecoin.png",
-  SOL: "https://assets.coingecko.com/coins/images/4128/small/solana.png",
-  ADA: "https://assets.coingecko.com/coins/images/975/small/cardano.png",
-  DOT: "https://assets.coingecko.com/coins/images/12171/small/polkadot.png",
-  SHIB: "https://assets.coingecko.com/coins/images/11939/small/shiba.png",
-  LTC: "https://assets.coingecko.com/coins/images/2/small/litecoin.png",
-  LINK: "https://assets.coingecko.com/coins/images/877/small/chainlink-new-logo.png",
-  AVAX: "https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png",
-  MATIC: "https://assets.coingecko.com/coins/images/4713/small/matic-token-icon.png",
-  UNI: "https://assets.coingecko.com/coins/images/12504/small/uniswap-uni.png",
-  ATOM: "https://assets.coingecko.com/coins/images/1481/small/cosmos_hub.png",
-  XLM: "https://assets.coingecko.com/coins/images/100/small/Stellar_symbol_black_RGB.png",
-}
-
-// Mock data for when API fails
-const mockCryptoData: CryptoMarketData[] = [
-  {
-    id: "bitcoin",
-    name: "Bitcoin",
-    symbol: "btc",
-    image: cryptoIcons.BTC,
-    current_price: 43892.21,
-    price_change_24h: 1340.32,
-    price_change_percentage_24h: 3.15,
-    market_cap: 859432000000,
-    total_volume: 28943000000,
-  },
-  {
-    id: "ethereum",
-    name: "Ethereum",
-    symbol: "eth",
-    image: cryptoIcons.ETH,
-    current_price: 2354.87,
-    price_change_24h: -120.43,
-    price_change_percentage_24h: -4.87,
-    market_cap: 282943000000,
-    total_volume: 15432000000,
-  },
-  {
-    id: "ripple",
-    name: "XRP",
-    symbol: "xrp",
-    image: cryptoIcons.XRP,
-    current_price: 0.58,
-    price_change_24h: 0.03,
-    price_change_percentage_24h: 5.23,
-    market_cap: 31432000000,
-    total_volume: 1943000000,
-  },
-  {
-    id: "dogecoin",
-    name: "Dogecoin",
-    symbol: "doge",
-    image: cryptoIcons.DOGE,
-    current_price: 0.12,
-    price_change_24h: 0.01,
-    price_change_percentage_24h: 9.12,
-    market_cap: 17432000000,
-    total_volume: 1243000000,
-  },
-  {
-    id: "solana",
-    name: "Solana",
-    symbol: "sol",
-    image: cryptoIcons.SOL,
-    current_price: 103.42,
-    price_change_24h: 5.32,
-    price_change_percentage_24h: 5.42,
-    market_cap: 45432000000,
-    total_volume: 2943000000,
-  },
-  {
-    id: "cardano",
-    name: "Cardano",
-    symbol: "ada",
-    image: cryptoIcons.ADA,
-    current_price: 0.48,
-    price_change_24h: 0.02,
-    price_change_percentage_24h: 4.35,
-    market_cap: 16932000000,
-    total_volume: 543000000,
-  },
-  {
-    id: "polkadot",
-    name: "Polkadot",
-    symbol: "dot",
-    image: cryptoIcons.DOT,
-    current_price: 6.84,
-    price_change_24h: 0.32,
-    price_change_percentage_24h: 4.91,
-    market_cap: 9432000000,
-    total_volume: 343000000,
-  },
-  {
-    id: "shiba-inu",
-    name: "Shiba Inu",
-    symbol: "shib",
-    image: cryptoIcons.SHIB,
-    current_price: 0.000018,
-    price_change_24h: 0.000001,
-    price_change_percentage_24h: 5.87,
-    market_cap: 10432000000,
-    total_volume: 543000000,
-  },
-  {
-    id: "litecoin",
-    name: "Litecoin",
-    symbol: "ltc",
-    image: cryptoIcons.LTC,
-    current_price: 68.43,
-    price_change_24h: 3.21,
-    price_change_percentage_24h: 4.92,
-    market_cap: 5132000000,
-    total_volume: 343000000,
-  },
-]
+const sparklineCache = new Map<string, number[]>();
 
 export function CryptoMarketTable() {
-  const [cryptoData, setCryptoData] = useState<CryptoMarketData[]>([])
-  const [loading, setLoading] = useState(true)
-  const [sortColumn, setSortColumn] = useState("market_cap")
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
-  const [usingMockData, setUsingMockData] = useState(false)
+  const { convert, format } = useCurrency();
+  const [cryptoData, setCryptoData] = useState<CryptoMarketData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sortColumn, setSortColumn] = useState<keyof CryptoMarketData>("market_cap_rank");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterRank, setFilterRank] = useState<"all" | "top10" | "top50" | "top100">("all");
+  const [showSparklines, setShowSparklines] = useState(true);
+  const [compactMode, setCompactMode] = useState(false);
 
   useEffect(() => {
     const fetchCryptoMarketData = async () => {
+      setRefreshing(true);
+      setError(null);
       try {
-        // Using CoinAPI to get exchange rates for top assets
-        const response = await fetch(
-          "https://rest.coinapi.io/v1/assets?filter_asset_id=BTC,ETH,XRP,DOGE,SOL,ADA,DOT,SHIB,LTC,LINK,AVAX,MATIC,UNI,ATOM,XLM",
-          {
-            headers: {
-              "X-CoinAPI-Key": "72c94488-200c-4614-8f61-14b80a91ec85",
-            },
-          },
-        )
+        const response = await fetch("/api/markets", { cache: "no-store" });
 
         if (!response.ok) {
-          throw new Error(`Network response was not ok: ${response.status}`)
+          throw new Error(`Network response was not ok: ${response.status}`);
         }
 
-        const assetsData = await response.json()
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error(`Market service returned an invalid response (${response.status})`);
+        }
 
-        // Format the data to match our interface
-        const formattedData: CryptoMarketData[] = assetsData.map((asset: any) => {
-          // Calculate a random 24h change for demo purposes
-          // In a real app, we would fetch this data for each asset
-          const randomChange = Math.random() * 10 - 5 // Random between -5% and +5%
-          const priceChange = asset.price_usd * (randomChange / 100)
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error(data.error || "Market provider returned an invalid response");
 
-          return {
-            id: asset.asset_id.toLowerCase(),
-            name: asset.name || asset.asset_id,
-            symbol: asset.asset_id.toLowerCase(),
-            image: cryptoIcons[asset.asset_id] || `/placeholder.svg?height=24&width=24&text=${asset.asset_id}`,
-            current_price: asset.price_usd || 0,
-            price_change_24h: priceChange,
-            price_change_percentage_24h: randomChange,
-            market_cap: asset.volume_1day_usd || 0,
-            total_volume: asset.volume_1hrs_usd || 0,
-          }
-        })
+        const enrichedData = data.map((asset: any, index: number) => ({
+          ...asset,
+          market_cap_rank: asset.market_cap_rank ?? index + 1,
+          price_change_percentage_7d: asset.price_change_percentage_7d_in_currency?.usd ?? asset.price_change_percentage_7d,
+          price_change_percentage_30d: asset.price_change_percentage_30d_in_currency?.usd ?? asset.price_change_percentage_30d,
+          high_24h: typeof asset.high_24h === "number" ? asset.high_24h : asset.high_24h?.usd,
+          low_24h: typeof asset.low_24h === "number" ? asset.low_24h : asset.low_24h?.usd,
+          ath: typeof asset.ath === "number" ? asset.ath : asset.ath?.usd,
+          ath_change_percentage: typeof asset.ath_change_percentage === "number" ? asset.ath_change_percentage : asset.ath_change_percentage?.usd,
+        }));
 
-        setCryptoData(formattedData)
-        setUsingMockData(false)
+        setCryptoData(enrichedData);
       } catch (error) {
-        console.error("Error fetching market data:", error)
-        // Use mock data as fallback
-        setCryptoData(mockCryptoData)
-        setUsingMockData(true)
+        console.error("Error fetching market data:", error);
+        setError("Live market data is temporarily unavailable.");
       } finally {
-        setLoading(false)
+        setLoading(false);
+        setRefreshing(false);
       }
-    }
+    };
 
-    fetchCryptoMarketData()
-  }, [])
+    fetchCryptoMarketData();
+    const interval = window.setInterval(fetchCryptoMarketData, 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
-  const handleSort = (column: string) => {
+  const handleSort = (column: keyof CryptoMarketData) => {
     if (sortColumn === column) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      setSortColumn(column)
-      setSortDirection("desc")
+      setSortColumn(column);
+      setSortDirection("asc");
     }
-  }
+  };
 
-  const sortedData = [...cryptoData].sort((a, b) => {
-    const aValue = a[sortColumn as keyof CryptoMarketData]
-    const bValue = b[sortColumn as keyof CryptoMarketData]
+  const filteredData = useMemo(() => {
+    let result = [...cryptoData];
 
-    if (typeof aValue === "number" && typeof bValue === "number") {
-      return sortDirection === "asc" ? aValue - bValue : bValue - aValue
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (asset) =>
+          asset.name.toLowerCase().includes(term) ||
+          asset.symbol.toLowerCase().includes(term) ||
+          asset.id.toLowerCase().includes(term)
+      );
     }
 
-    // For string values
-    if (typeof aValue === "string" && typeof bValue === "string") {
-      return sortDirection === "asc" ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue)
+    if (filterRank !== "all") {
+      const limit = parseInt(filterRank.replace("top", ""), 10);
+      result = result.filter((asset) => (asset.market_cap_rank ?? Infinity) <= limit);
     }
 
-    return 0
-  })
+    return result;
+  }, [cryptoData, searchTerm, filterRank]);
+
+  const sortedData = useMemo(() => {
+    return [...filteredData].sort((a, b) => {
+      const aValue = a[sortColumn];
+      const bValue = b[sortColumn];
+
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sortDirection === "asc" ? aValue - bValue : bValue - aValue;
+      }
+
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortDirection === "asc" ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+      }
+
+      return 0;
+    });
+  }, [filteredData, sortColumn, sortDirection]);
+
+  const formatPrice = (price: number) => {
+    const converted = convert(price);
+    if (converted >= 1) return format(price, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (converted >= 0.01) return format(price, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    return format(price, { minimumFractionDigits: 8, maximumFractionDigits: 8 });
+  };
+
+  const formatLargeNumber = (num?: number) => {
+    if (num == null) return "N/A";
+    const converted = convert(num);
+    if (converted >= 1e12) return `${format(num, { maximumFractionDigits: 2 })}`;
+    if (converted >= 1e9) return `${format(num, { maximumFractionDigits: 2 })}`;
+    if (converted >= 1e6) return `${format(num, { maximumFractionDigits: 2 })}`;
+    return format(num, { maximumFractionDigits: 0 });
+  };
+
+  const getChangeColor = (change: number) => change >= 0 ? "text-chart-2" : "text-destructive";
+  const getChangeBg = (change: number) => change >= 0 ? "bg-chart-2/10" : "bg-destructive/10";
+  const getChangeIcon = (change: number) => change >= 0 ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
+
+  const SortableHeader = ({ column, label, children, className }: { column: keyof CryptoMarketData; label: string; children?: React.ReactNode; className?: string }) => (
+    <TableHead className={cn("cursor-pointer select-none hover:bg-muted/50 transition-colors", className)}>
+      <Button variant="ghost" className="p-0 h-auto font-medium text-xs uppercase tracking-wider text-muted-foreground" onClick={() => handleSort(column)}>
+        <div className="flex items-center gap-1.5">
+          {label}
+          {children}
+          {sortColumn === column && (
+            <span className="flex items-center">
+              {sortDirection === "asc" ? <ChevronUp className="h-3.5 w-3.5 text-primary" /> : <ChevronDown className="h-3.5 w-3.5 text-primary" />}
+            </span>
+          )}
+        </div>
+      </Button>
+    </TableHead>
+  );
 
   if (loading) {
-    return <div className="py-4 text-center">Loading market data...</div>
+    return (
+      <div className="surface-panel overflow-hidden">
+        <div className="p-6 border-b border-border/30">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-xl font-semibold">Crypto Markets</h2>
+            <div className="flex items-center gap-2">
+              <Input placeholder="Search assets..." className="w-64 bg-background/50" disabled />
+              <Button variant="outline" size="icon" disabled><RefreshCw className="h-4 w-4 animate-spin" /></Button>
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          <div className="space-y-3">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4 p-3 skeleton-premium rounded-xl h-14" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="overflow-auto">
-      {usingMockData && <div className="text-sm text-amber-500 mb-2">Using demo data (API unavailable)</div>}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[50px]">#</TableHead>
-            <TableHead>Cryptocurrency</TableHead>
-            <TableHead>
-              <Button variant="ghost" className="p-0 font-medium" onClick={() => handleSort("current_price")}>
-                Price
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-              </Button>
-            </TableHead>
-            <TableHead>
-              <Button
-                variant="ghost"
-                className="p-0 font-medium"
-                onClick={() => handleSort("price_change_percentage_24h")}
-              >
-                24h %
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-              </Button>
-            </TableHead>
-            <TableHead className="hidden md:table-cell">
-              <Button variant="ghost" className="p-0 font-medium" onClick={() => handleSort("market_cap")}>
-                Market Cap
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-              </Button>
-            </TableHead>
-            <TableHead className="hidden md:table-cell">
-              <Button variant="ghost" className="p-0 font-medium" onClick={() => handleSort("total_volume")}>
-                Volume (24h)
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-              </Button>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedData.map((crypto, index) => (
-            <TableRow key={crypto.id}>
-              <TableCell className="font-medium">{index + 1}</TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-6 w-6">
-                    <img src={crypto.image || "/placeholder.svg"} alt={crypto.name} />
-                  </Avatar>
-                  <div>
-                    <div className="font-medium">{crypto.name}</div>
-                    <div className="text-xs text-muted-foreground">{crypto.symbol.toUpperCase()}</div>
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell>${crypto.current_price.toLocaleString(undefined, { maximumFractionDigits: 6 })}</TableCell>
-              <TableCell className={crypto.price_change_percentage_24h >= 0 ? "text-green-500" : "text-red-500"}>
-                {crypto.price_change_percentage_24h.toFixed(2)}%
-              </TableCell>
-              <TableCell className="hidden md:table-cell">${crypto.market_cap.toLocaleString()}</TableCell>
-              <TableCell className="hidden md:table-cell">${crypto.total_volume.toLocaleString()}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  )
-}
+    <div className="surface-panel-elevated overflow-hidden">
+      <div className="p-6 border-b border-border/30">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div>
+            <h2 className="font-display text-xl font-semibold">Crypto Markets</h2>
+            <p className="text-sm text-muted-foreground mt-1">Live spot prices and 24-hour performance • {sortedData.length} assets</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search assets..."
+                className="pl-10 w-64 bg-background/50"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Select value={filterRank} onValueChange={(value) => setFilterRank(value as typeof filterRank)}>
+              <SelectTrigger className="w-[140px] bg-background/50">
+                <SelectValue placeholder="All Ranks" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Assets</SelectItem>
+                <SelectItem value="top10">Top 10</SelectItem>
+                <SelectItem value="top50">Top 50</SelectItem>
+                <SelectItem value="top100">Top 100</SelectItem>
+              </SelectContent>
+            </Select>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => setShowSparklines(!showSparklines)} className={cn(showSparklines && "bg-primary/10 text-primary")}>
+                    <Activity className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{showSparklines ? "Hide sparklines" : "Show sparklines"}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" onClick={() => setCompactMode(!compactMode)} className={cn(compactMode && "bg-primary/10 text-primary")}>
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{compactMode ? "Expanded view" : "Compact view"}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <Button variant="outline" size="icon" onClick={() => window.location.reload()} disabled={refreshing} className={refreshing ? "animate-spin" : ""}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
 
+      {error && (
+        <div className="px-6 py-3 bg-destructive/10 border-b border-border/30 flex items-center justify-between">
+          <p className="text-sm text-destructive flex items-center gap-2">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            {error} {refreshing ? "Retrying..." : ""}
+          </p>
+          <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-b border-border/30 bg-muted/30">
+              <SortableHeader column="market_cap_rank" label="#" />
+              <SortableHeader column="name" label="Asset" />
+              <SortableHeader column="current_price" label="Price" />
+              <TableHead className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">24h</TableHead>
+              <TableHead className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">7d</TableHead>
+              <TableHead className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">30d</TableHead>
+              <SortableHeader column="market_cap" label="Market Cap" className="hidden md:table-cell" />
+              <SortableHeader column="total_volume" label="Volume (24h)" className="hidden lg:table-cell" />
+              <TableHead className="text-right px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">ATH</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedData.map((crypto, index) => (
+              <TableRow
+                key={crypto.id}
+                className={cn(
+                  "transition-colors hover:bg-muted/30 cursor-pointer group",
+                  "animate-fade-in"
+                )}
+                style={{ animationDelay: `${Math.min(index * 20, 300)}ms` }}
+              >
+                <TableCell className="font-mono font-medium text-sm text-muted-foreground">
+                  {crypto.market_cap_rank}
+                </TableCell>
+                <TableCell className="px-6">
+                  <div className="flex items-center gap-3">
+                    <Avatar className={cn("h-8 w-8 ring-2 ring-background", compactMode && "h-6 w-6")}>
+                      <AvatarImage src={crypto.image} alt={crypto.name} />
+                      <AvatarFallback className="text-xs font-semibold">{crypto.symbol.toUpperCase()[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className={cn("font-medium truncate", compactMode && "text-sm")}>{crypto.name}</p>
+                        {crypto.market_cap_rank != null && crypto.market_cap_rank <= 10 && (
+                          <Badge variant="secondary" className="text-xs h-4 px-1.5">Top 10</Badge>
+                        )}
+                      </div>
+                      <p className={cn("text-xs text-muted-foreground truncate", compactMode && "hidden")}>{crypto.symbol.toUpperCase()}</p>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums font-medium">
+                  {formatPrice(crypto.current_price)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className={cn("flex items-center justify-end gap-1.5", getChangeBg(crypto.price_change_percentage_24h), "rounded-full px-2.5 py-1")}>
+                    {getChangeIcon(crypto.price_change_percentage_24h)}
+                    <span className={cn("text-sm font-semibold", getChangeColor(crypto.price_change_percentage_24h))}>
+                      {crypto.price_change_percentage_24h.toFixed(2)}%
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right hidden md:table-cell">
+                  {crypto.price_change_percentage_7d !== undefined && (
+                    <span className={cn("text-sm font-semibold", getChangeColor(crypto.price_change_percentage_7d))}>
+                      {crypto.price_change_percentage_7d != null ? `${crypto.price_change_percentage_7d >= 0 ? "+" : ""}${crypto.price_change_percentage_7d.toFixed(2)}%` : "N/A"}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right hidden lg:table-cell">
+                  {crypto.price_change_percentage_30d !== undefined && (
+                    <span className={cn("text-sm font-semibold", getChangeColor(crypto.price_change_percentage_30d))}>
+                      {crypto.price_change_percentage_30d != null ? `${crypto.price_change_percentage_30d >= 0 ? "+" : ""}${crypto.price_change_percentage_30d.toFixed(2)}%` : "N/A"}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground hidden md:table-cell font-mono tabular-nums">
+                  {formatLargeNumber(crypto.market_cap)}
+                </TableCell>
+                <TableCell className="text-right text-sm text-muted-foreground hidden lg:table-cell font-mono tabular-nums">
+                  {formatLargeNumber(crypto.total_volume)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {crypto.ath_change_percentage !== undefined && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className={cn("text-xs font-medium", crypto.ath_change_percentage >= -10 ? "text-destructive" : "text-muted-foreground")}>
+                            {crypto.ath_change_percentage.toFixed(1)}%
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" align="end">
+                          <div className="space-y-1">
+                            <p className="font-medium">All-Time High</p>
+                            <p className="text-sm">{crypto.ath != null ? formatPrice(crypto.ath) : "N/A"}</p>
+                            <p className="text-xs text-muted-foreground">Current: {formatPrice(crypto.current_price)}</p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+            {sortedData.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={9} className="px-6 py-12 text-center text-muted-foreground">
+                  No assets found matching your criteria
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="p-4 border-t border-border/30 bg-muted/30 flex items-center justify-between text-sm text-muted-foreground">
+        <span>Last updated: {formatDashboardTime(new Date())}</span>
+        <span>Auto-refresh: 60s</span>
+      </div>
+    </div>
+  );
+}
